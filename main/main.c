@@ -20,6 +20,7 @@
 #include "esp_log.h"
 #include "esp_random.h"
 #include "sx1262.h"
+#include "ssd1306.h"
 
 static const char *TAG = "sensor";
 
@@ -64,18 +65,32 @@ static uint16_t simulate_ldr_reading(void)
 /* ── Task principal ──────────────────────────────────────────────── */
 static void sensor_task(void *arg)
 {
+    ssd1306_t *oled = (ssd1306_t *)arg;
     sx1262_t radio;
     esp_err_t ret;
+    char line[22];  /* 128px / 6px per char = 21 chars max */
 
     ret = sx1262_init(&radio);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Falha ao inicializar SX1262");
+        if (oled) {
+            ssd1306_clear(oled);
+            ssd1306_draw_string(oled, 0, 0, "SX1262 INIT FAIL");
+            ssd1306_update(oled);
+        }
         vTaskDelete(NULL);
         return;
     }
 
     ESP_LOGI(TAG, "=== LoRa Sensor Node (Responder) ===");
     ESP_LOGI(TAG, "Aguardando requisicoes do gateway...");
+
+    if (oled) {
+        ssd1306_clear(oled);
+        ssd1306_draw_string(oled, 0, 0, "LoRa Sensor Node");
+        ssd1306_draw_string(oled, 2, 0, "Aguardando...");
+        ssd1306_update(oled);
+    }
 
     while (1) {
         /* ── Entra em RX contínuo ────────────────────────────────── */
@@ -141,10 +156,31 @@ static void sensor_task(void *arg)
 
         ESP_LOGI(TAG, "Resposta enviada: LDR=%u [0x%02X 0x%02X 0x%02X 0x%02X]",
                  adc_value, response[0], response[1], response[2], response[3]);
+
+        if (oled) {
+            ssd1306_clear(oled);
+            ssd1306_draw_string(oled, 0, 0, "LoRa Sensor Node");
+
+            snprintf(line, sizeof(line), "LDR: %u", adc_value);
+            ssd1306_draw_string(oled, 2, 0, line);
+
+            snprintf(line, sizeof(line), "RSSI: %d dBm", rssi);
+            ssd1306_draw_string(oled, 4, 0, line);
+
+            ssd1306_draw_string(oled, 6, 0, "Enviado OK");
+            ssd1306_update(oled);
+        }
     }
 }
 
 void app_main(void)
 {
-    xTaskCreatePinnedToCore(sensor_task, "sensor", 4096, NULL, 5, NULL, 1);
+    ssd1306_t *oled = NULL;
+    esp_err_t ret = ssd1306_init(&oled);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "OLED init falhou (%s) — continuando sem display",
+                 esp_err_to_name(ret));
+    }
+
+    xTaskCreatePinnedToCore(sensor_task, "sensor", 4096, oled, 5, NULL, 1);
 }

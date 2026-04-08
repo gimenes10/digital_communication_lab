@@ -35,6 +35,15 @@ static const char *TAG = "sensor";
 /* ── ADC para LDR (GPIO1 = ADC1_CH0) ────────────────────────────── */
 static adc_oneshot_unit_handle_t s_adc_handle;
 
+/**
+ * @brief Inicializa o ADC1 canal 0 (GPIO1) para leitura do LDR.
+ *
+ * Configura atenuação de 12 dB (faixa ~0–3.1 V) e resolução de 12 bits
+ * (valores de 0 a 4095). O LDR deve estar conectado ao GPIO1 com um
+ * divisor resistivo.
+ *
+ * @return ESP_OK em caso de sucesso.
+ */
 static esp_err_t ldr_adc_init(void)
 {
     adc_oneshot_unit_init_cfg_t unit_cfg = {
@@ -52,6 +61,11 @@ static esp_err_t ldr_adc_init(void)
     return adc_oneshot_config_channel(s_adc_handle, ADC_CHANNEL_0, &chan_cfg);
 }
 
+/**
+ * @brief Lê o valor bruto do LDR via ADC (0–4095).
+ *
+ * Retorna 0 em caso de falha na leitura.
+ */
 static uint16_t read_ldr(void)
 {
     int raw = 0;
@@ -64,6 +78,20 @@ static uint16_t read_ldr(void)
 }
 
 /* ── Task principal ──────────────────────────────────────────────── */
+
+/**
+ * @brief Task FreeRTOS do nó sensor (responder LoRa).
+ *
+ * Fluxo:
+ *  1. Inicializa ADC (LDR) e rádio SX1262.
+ *  2. Entra em RX contínuo aguardando requisições do gateway.
+ *  3. Ao receber um pacote válido [0xBB, 0x01]:
+ *     - Lê o valor do LDR via ADC.
+ *     - Monta resposta [0xAA, DATA_H, DATA_L, XOR] e transmite.
+ *     - Atualiza o display OLED com o valor enviado e o RSSI.
+ *
+ * @param arg  Ponteiro para ssd1306_t (display OLED) ou NULL se indisponível.
+ */
 static void sensor_task(void *arg)
 {
     ssd1306_t *oled = (ssd1306_t *)arg;
@@ -179,6 +207,12 @@ static void sensor_task(void *arg)
     }
 }
 
+/**
+ * @brief Ponto de entrada da aplicação ESP-IDF.
+ *
+ * Inicializa o display OLED (falha é não-fatal) e cria a task do sensor
+ * no core 1 com 4 KB de stack.
+ */
 void app_main(void)
 {
     ssd1306_t *oled = NULL;

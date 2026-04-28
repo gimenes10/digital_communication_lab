@@ -148,8 +148,7 @@ static void sensor_task(void *arg)
         }
 
         /* ── Monta pacote de resposta [0xAA, HIGH, LOW, XOR] ─────── */
-        /* Formato idêntico ao da versão LDR: gateway/FPGA não precisam
-           saber qual sensor está do outro lado. XOR serve como checksum
+        /* XOR serve como checksum
            leve — captura erros de byte único na transmissão LoRa. */
         uint8_t data_high = (uint8_t)(lux >> 8);
         uint8_t data_low  = (uint8_t)(lux & 0xFF);
